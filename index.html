@@ -75,7 +75,7 @@
 
 <script src="vendor/ort.wasm.min.js"></script>
 <script type="module">
-import { loadModel, predict } from "./predict.js";
+import { loadModel, predict, predictTiled } from "./predict.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -116,6 +116,7 @@ try {
   ]);
   meta = m; advice = a;
   await loadModel({ wasmPaths: new URL("vendor/", location.href).href });
+  if (meta.tip) document.querySelector(".tip").textContent = meta.tip;
   ready = true;
 } catch (e) {
   $("#status").textContent = "Couldn't load the model: " + e.message;
@@ -134,7 +135,7 @@ $("#cam").addEventListener("change", e => {
     $("#scan").classList.add("busy");
     try {
       const t0 = performance.now();
-      const r = await predict(img);
+      const r = meta.tiles?.length ? await predictTiled(img) : await predict(img);
       show(r, img, Math.round(performance.now() - t0));
     } catch (err) {
       $("#result").innerHTML = `<div class="card notice">Couldn't check that photo: ${esc(err.message)}</div>`;
@@ -169,6 +170,7 @@ function show(r, img, ms) {
   } else {
     html += `<span class="domain">${esc(r.domain)}</span><h2>${esc(nice(r.label))}</h2>
              <div class="bar"><span style="width:${pct}%"></span></div><p class="muted">${pct}% sure · ${ms} ms on this phone</p>`;
+    if (r.coverage) html += `<p class="muted">Seen in ${r.coverage.matched} of ${r.coverage.tiles} parts of the photo</p>`;
     const a = advice[r.label];
     if (a) {
       if (a.what_it_means || a.signs) html += `<p>${esc(a.what_it_means || a.signs)}</p>`;

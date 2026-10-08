@@ -35,5 +35,10 @@
       "label": "texture_sand"
     }
   ],
-  "threshold": 0.6
+  "threshold": 0.6,
+  "tiles": [
+    3,
+    4
+  ],
+  "tip": "Point straight down at bare soil, about a hand's length away."
 }
