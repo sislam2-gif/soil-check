@@ -1,0 +1,24 @@
+{
+  "_note": "Starter advice for the soil texture model, general guidance written in plain words. Check against a soil science or extension source before relying on it, and fill in source.",
+  "texture_loam": {
+    "signs": "Loam: a balanced mix of sand, silt and clay. Crumbly, holds shape loosely when squeezed. Usually the easiest soil to farm.",
+    "do_now": ["Keep it covered with mulch or crop residue between crops.", "Avoid tilling when it is wet so it keeps its crumbly structure."],
+    "prevent": ["Add compost each season to keep organic matter up.", "Rotate crops and use cover crops."],
+    "call_expert_if": "Plants grow poorly even though the soil looks good. Get a lab soil test for pH and nutrients.",
+    "source": ""
+  },
+  "texture_sand": {
+    "signs": "Sandy: gritty, loose, falls apart when squeezed. Drains fast and dries out quickly; nutrients wash away easily.",
+    "do_now": ["Water more often in smaller amounts, at the base of plants.", "Mulch to slow drying."],
+    "prevent": ["Add compost or manure every season to help it hold water and nutrients.", "Split fertilizer into several small doses instead of one big one."],
+    "call_expert_if": "Leaves turn pale or yellow even with fertilizer. Nutrients may be washing out; get a lab soil test.",
+    "source": ""
+  },
+  "texture_clay": {
+    "signs": "Clay: sticky when wet, hard and cracked when dry. Holds water and nutrients well but drains slowly.",
+    "do_now": ["Stay off it and don't till when it is wet.", "Water deeply but less often, and check for standing water."],
+    "prevent": ["Add compost to loosen it over time.", "Use raised beds or ridges where water collects."],
+    "call_expert_if": "Water stands for more than a day after rain, or roots look brown and rotten.",
+    "source": ""
+  }
+}

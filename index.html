@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f7d4f">
+<title>Soil Check</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --green: #2f7d4f; --green-dark: #1f5a37; --bg: #f6f7f2; --card: #fff;
+    --text: #16191a; --muted: #4d5450; --line: #d5dad2;
+    --warn-bg: #fff4dc; --warn: #e2a500;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; font: 18px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         color: var(--text); background: var(--bg); overflow-x: hidden;
+         padding-bottom: env(safe-area-inset-bottom); }
+  header { background: var(--green); color: #fff; padding: calc(14px + env(safe-area-inset-top)) 16px 14px; }
+  header h1 { margin: 0; font-size: 24px; }
+  #status { margin: 2px 0 0; font-size: 15px; opacity: .92; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  .scan { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%;
+          min-height: 110px; border-radius: 24px; background: var(--green); color: #fff;
+          font-size: 26px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 0 var(--green-dark);
+          user-select: none; -webkit-tap-highlight-color: transparent; }
+  .scan:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--green-dark); }
+  .scan.busy { opacity: .6; pointer-events: none; }
+  .tip { color: var(--muted); font-size: 16px; text-align: center; margin: 12px 0 0; }
+  .card { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 16px; margin-top: 16px; }
+  .photo { width: 100%; max-height: 280px; object-fit: cover; border-radius: 12px; display: block; margin-bottom: 14px; }
+  .domain { display: inline-block; padding: 3px 12px; border-radius: 999px; background: #e3efe7;
+            color: var(--green-dark); font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  h2 { margin: 8px 0 4px; font-size: 28px; line-height: 1.2; }
+  h3 { margin: 16px 0 6px; font-size: 19px; }
+  .bar { height: 14px; border-radius: 7px; background: var(--line); overflow: hidden; margin-top: 8px; }
+  .bar span { display: block; height: 100%; background: var(--green); }
+  .muted { color: var(--muted); font-size: 16px; }
+  .alt { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 17px; }
+  .notice { background: var(--warn-bg); border-color: var(--warn); font-weight: 600; }
+  ol, ul { margin: 0; padding-left: 24px; } li { margin: 6px 0; }
+  .btn { width: 100%; min-height: 56px; margin-top: 12px; border-radius: 14px; border: 3px solid var(--green);
+         background: transparent; color: var(--green-dark); font: inherit; font-weight: 700; cursor: pointer; }
+  .hist { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .hist img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; flex: none; }
+  .hist div { min-width: 0; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Soil Check</h1>
+  <p id="status">Loading…</p>
+</header>
+
+<main>
+  <label class="scan" id="scan">📷 <span>Check a photo</span>
+    <input id="cam" type="file" accept="image/*" capture="environment" hidden>
+  </label>
+  <p class="tip">Fill the frame with one leaf, one patch of soil, or one tree part, in daylight.</p>
+
+  <div id="result"></div>
+
+  <button class="btn" id="install" hidden>Install on this phone</button>
+  <p class="tip" id="ios-tip" hidden>To install: tap Share, then “Add to Home Screen”.</p>
+
+  <div class="card" id="history-card" hidden>
+    <h3 style="margin-top:0">Recent checks (saved on this phone)</h3>
+    <div id="history"></div>
+    <button class="btn" id="clear">Clear history</button>
+  </div>
+</main>
+
+<script src="vendor/ort.wasm.min.js"></script>
+<script type="module">
+import { loadModel, predict } from "./predict.js";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nice = label => label.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase());
+let meta = {}, advice = {}, ready = false, offlineReady = false;
+
+function setStatus() {
+  const parts = [];
+  parts.push(ready ? "Model ready" : "Loading model…");
+  if (offlineReady) parts.push("works offline ✓");
+  else if (!("serviceWorker" in navigator) || !window.isSecureContext) parts.push("open over https to use offline");
+  else parts.push("saving for offline…");
+  $("#status").textContent = parts.join(" · ");
+}
+
+// ---------- offline install (service worker)
+if ("serviceWorker" in navigator && window.isSecureContext) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW failed", e));
+  navigator.serviceWorker.ready.then(() => { offlineReady = true; setStatus(); });
+  // a new model was published: reload once to use it
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController) location.reload(); });
+}
+setStatus();
+
+// ---------- install button (Android/desktop Chrome) and iPhone hint
+let installEvent = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvent = e; $("#install").hidden = false; });
+$("#install").onclick = async () => { if (!installEvent) return; installEvent.prompt(); await installEvent.userChoice; $("#install").hidden = true; };
+const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone) $("#ios-tip").hidden = false;
+
+// ---------- model
+try {
+  const [m, a] = await Promise.all([
+    fetch("labels.json").then(r => r.json()),
+    fetch("advice.json").then(r => r.ok ? r.json() : {}).catch(() => ({})),
+  ]);
+  meta = m; advice = a;
+  await loadModel({ wasmPaths: new URL("vendor/", location.href).href });
+  ready = true;
+} catch (e) {
+  $("#status").textContent = "Couldn't load the model: " + e.message;
+  throw e;
+}
+setStatus();
+renderHistory();
+
+// ---------- check a photo
+$("#cam").addEventListener("change", e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file || !ready) return;
+  const img = new Image();
+  img.onload = async () => {
+    $("#scan").classList.add("busy");
+    try {
+      const t0 = performance.now();
+      const r = await predict(img);
+      show(r, img, Math.round(performance.now() - t0));
+    } catch (err) {
+      $("#result").innerHTML = `<div class="card notice">Couldn't check that photo: ${esc(err.message)}</div>`;
+    } finally {
+      $("#scan").classList.remove("busy");
+      URL.revokeObjectURL(img.src);
+    }
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+function thumb(img, size) {
+  const c = document.createElement("canvas");
+  const s = Math.min(img.naturalWidth, img.naturalHeight);
+  c.width = c.height = size;
+  c.getContext("2d").drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, size, size);
+  return c.toDataURL("image/jpeg", 0.8);
+}
+
+function show(r, img, ms) {
+  const threshold = meta.threshold ?? 0.6;
+  const pct = Math.round(r.confidence * 100);
+  const notRelevant = r.domain === "other";
+  const unsure = !notRelevant && r.confidence < threshold;
+  let html = `<div class="card"><img class="photo" src="${thumb(img, 640)}" alt="">`;
+
+  if (notRelevant) {
+    html += `<h2>Nothing to check</h2><p>This doesn't look like a plant, soil or tree. Try a closer photo of one leaf, one patch of soil, or one part of a tree.</p>`;
+  } else if (unsure) {
+    html += `<h2>Not sure</h2><p>Retake the photo closer, with one subject filling the frame, in good light.</p>
+             <p class="muted">Best guess: ${esc(nice(r.label))} (${pct}%)</p>`;
+  } else {
+    html += `<span class="domain">${esc(r.domain)}</span><h2>${esc(nice(r.label))}</h2>
+             <div class="bar"><span style="width:${pct}%"></span></div><p class="muted">${pct}% sure · ${ms} ms on this phone</p>`;
+    const a = advice[r.label];
+    if (a) {
+      if (a.what_it_means || a.signs) html += `<p>${esc(a.what_it_means || a.signs)}</p>`;
+      if (a.do_now?.length) html += `<h3>Do this now</h3><ol>${a.do_now.map(x => `<li>${esc(x)}</li>`).join("")}</ol>`;
+      const prev = a.prevent || a.fix_long_term;
+      if (prev?.length) html += `<h3>Prevent it next time</h3><ul>${prev.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+      if (a.call_expert_if) html += `<h3>Get expert help if…</h3><p>${esc(a.call_expert_if)}</p>`;
+    }
+  }
+  if (!notRelevant) {
+    html += `<h3>Other possibilities</h3>` + r.top3.slice(1).map(t =>
+      `<div class="alt"><span>${esc(nice(t.label))}</span><span>${Math.round(t.confidence * 100)}%</span></div>`).join("");
+  }
+  html += `</div>`;
+  $("#result").innerHTML = html;
+  $("#result").scrollIntoView({ behavior: "smooth" });
+  saveHistory({ t: Date.now(), label: r.label, domain: r.domain, c: r.confidence, unsure, notRelevant, thumb: thumb(img, 96) });
+}
+
+// ---------- history (kept on the phone only)
+function loadHist() { try { return JSON.parse(localStorage.getItem("fv-history") || "[]"); } catch { return []; } }
+function saveHistory(item) {
+  const h = [item, ...loadHist()].slice(0, 30);
+  try { localStorage.setItem("fv-history", JSON.stringify(h)); } catch {}
+  renderHistory();
+}
+function renderHistory() {
+  const h = loadHist();
+  $("#history-card").hidden = !h.length;
+  $("#history").innerHTML = h.map(x => {
+    const what = x.notRelevant ? "Not a plant, soil or tree" : (x.unsure ? "Not sure · " : "") + nice(x.label);
+    const when = new Date(x.t).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return `<div class="hist"><img src="${x.thumb}" alt=""><div><strong>${esc(what)}</strong><br>
+            <span class="muted">${when} · ${Math.round(x.c * 100)}%</span></div></div>`;
+  }).join("");
+}
+$("#clear").onclick = () => { try { localStorage.removeItem("fv-history"); } catch {} renderHistory(); };
+</script>
+</body>
+</html>

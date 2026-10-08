@@ -1,0 +1,39 @@
+{
+  "model": "mobilenetv3_large_100",
+  "img": 224,
+  "crop_frac": 0.875,
+  "mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "temperature": 0.3940510153770447,
+  "classes": [
+    {
+      "id": "other/not_relevant",
+      "domain": "other",
+      "label": "not_relevant"
+    },
+    {
+      "id": "soil/texture_clay",
+      "domain": "soil",
+      "label": "texture_clay"
+    },
+    {
+      "id": "soil/texture_loam",
+      "domain": "soil",
+      "label": "texture_loam"
+    },
+    {
+      "id": "soil/texture_sand",
+      "domain": "soil",
+      "label": "texture_sand"
+    }
+  ],
+  "threshold": 0.6
+}

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field model test</title>
+<style>
+  body { font: 18px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; max-width: 560px; margin-inline: auto; background: #f6f7f2; color: #1b1f1c; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  #status { color: #5b625d; margin: 0 0 16px; }
+  label.big { display: block; text-align: center; padding: 20px; border-radius: 14px; background: #2f7d4f; color: #fff; font-weight: 700; }
+  img { width: 100%; border-radius: 12px; margin-top: 16px; }
+  .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #dfe3dc; }
+  .bar { height: 8px; background: #e6e9e2; border-radius: 4px; overflow: hidden; }
+  .bar div { height: 100%; background: #2f7d4f; }
+  small { color: #5b625d; }
+</style>
+</head>
+<body>
+  <h1>Field model test</h1>
+  <p id="status">Loading model…</p>
+  <label class="big">📷 Take or pick a photo
+    <input id="cam" type="file" accept="image/*" capture="environment" hidden>
+  </label>
+  <img id="preview" hidden alt="">
+  <div id="out"></div>
+
+  <script src="vendor/ort.wasm.min.js"></script>
+  <script type="module">
+    import { loadModel, predict } from "./predict.js";
+    const $ = s => document.querySelector(s);
+    const t0 = performance.now();
+    try {
+      await loadModel({ wasmPaths: new URL("vendor/", location.href).href });
+      $("#status").textContent = `Ready in ${Math.round(performance.now() - t0)} ms · works offline`;
+    } catch (e) {
+      $("#status").textContent = "Model failed to load: " + e.message +
+        " (did you run get_ort.sh, and open this with a local server?)";
+      throw e;
+    }
+    $("#cam").addEventListener("change", e => {
+      const f = e.target.files[0]; e.target.value = "";
+      if (!f) return;
+      const img = $("#preview");
+      img.onload = async () => {
+        const s = performance.now();
+        const r = await predict(img);
+        const ms = Math.round(performance.now() - s);
+        $("#out").innerHTML = `<p><strong>${r.domain}: ${r.label}</strong> · ${Math.round(r.confidence * 100)}% sure
+          <br><small>${ms} ms on this device</small></p>` +
+          r.top3.map(t => `<div class="row"><span>${t.label}</span><span>${(t.confidence * 100).toFixed(1)}%</span></div>
+          <div class="bar"><div style="width:${t.confidence * 100}%"></div></div>`).join("");
+      };
+      img.src = URL.createObjectURL(f);
+      img.hidden = false;
+    });
+  </script>
+</body>
+</html>
